@@ -1,0 +1,2 @@
+[default.general]
+chip = "stm32h743VITX"

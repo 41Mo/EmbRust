@@ -1,0 +1,17 @@
+[package]
+name = "freertos_test"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cortex-m = "0.6.0"
+cortex-m-rt = {version = "0.6.12"}
+freertos-rust = "*"
+panic-halt = "0.2.0"
+embedded-hal = "0.2.3"
+stm32h7xx-hal = {version = "0.13.0", features = ["rt", "stm32h743"]}
+
+[build-dependencies]
+freertos-cargo-build = "*"
