@@ -1,7 +1,7 @@
 use crate::hal::{
     serial::{Rx, Tx},
 };
-use core::sync::atomic::{AtomicPtr};
+use core::sync::atomic::AtomicPtr;
 
 pub struct UartType<T> {
     pub tx: AtomicPtr<Tx<T>>,

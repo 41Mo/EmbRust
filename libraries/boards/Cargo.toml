@@ -1,0 +1,27 @@
+[package]
+name = "boards"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nb = "1.1.0"
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.3"
+panic-halt = "0.2.0"
+stm32h7xx-hal = {version = "0.14.0"}
+usb-device = "0.2.5"
+usbd-serial = "0.1.0"
+
+[features]
+default = ["matekh743"]
+device-selected = []
+matekh743 = ["device-selected", "stm32h7xx-hal/stm32h743", "stm32h7xx-hal/rt", "stm32h7xx-hal/usb_hs", "stm32h7xx-hal/rm0433"]
+matekf411 = ["device-selected", "stm32f4xx-hal/stm32f411"]
+
+[target.thumbv7em-none-eabihf.dependencies]
+stm32h7xx-hal = {version = "0.14.0"}
+
+[target.thumbv7m-none-eabi.dependencies]
+stm32f4xx-hal = {version = "0.15.0"}

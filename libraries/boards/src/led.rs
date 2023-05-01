@@ -1,5 +1,5 @@
 use core::sync::atomic::{AtomicPtr, Ordering};
-use crate::periph::{LedGreenType, LedBlueType};
+use crate::periph::*;
 
 pub struct Leds<B, G> {
     pub led_blue: AtomicPtr<B>,

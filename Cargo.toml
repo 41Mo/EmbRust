@@ -10,11 +10,13 @@ cortex-m = "0.7.7"
 cortex-m-rt = {version = "0.7.3"}
 freertos-rust = "0.1.2"
 panic-halt = "0.2.0"
-# embedded-hal = "0.2.7"
-stm32h7xx-hal = {version = "0.14.0", features = ["rt", "stm32h743"]}
-nb = "1.1.0"
-#boards = {path = "boards"}
+boards = {path = "libraries/boards"}
+usb-device = "0.2.5"
+usbd-serial = "0.1.0"
 
+[features]
+matekh743 = ["boards/matekh743"]
+#matekf411 = ["boards/matekf411"]
 
 [build-dependencies]
 freertos-cargo-build = "*"
