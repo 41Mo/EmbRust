@@ -1,6 +1,32 @@
-use crate::serial::TELEM1;
-use crate::led::LEDS;
-use crate::hal::{gpio::*, pac, prelude::*};
+use stm32h7xx_hal::{
+    gpio::*,
+    pac,
+    prelude::*,
+    stm32::*,
+    serial::{Tx, Rx},
+};
+use crate::led::Leds;
+use crate::serial::*;
+use crate::uart_ops;
+use core::sync::atomic::{AtomicPtr, Ordering};
+use nb::block;
+
+pub type LedBlueType = Pin<'E', 3, Output<PushPull>>;
+pub type LedGreenType = Pin<'E', 4, Output<PushPull>>;
+
+pub static TELEM1: UartType<UART7> = UartType {
+    tx: AtomicPtr::new(core::ptr::null_mut()),
+    rx: AtomicPtr::new(core::ptr::null_mut()),
+};
+
+pub static LEDS: Leds<LedBlueType, LedGreenType> = Leds {
+    led_blue: AtomicPtr::new(core::ptr::null_mut()),
+    led_green: AtomicPtr::new(core::ptr::null_mut()),
+};
+
+uart_ops! {
+    UART7
+}
 
 pub fn setup_periph() {
     let dp = pac::Peripherals::take().unwrap();
@@ -9,7 +35,6 @@ pub fn setup_periph() {
 
     let ccdr = rcc
         .sys_ck(200.MHz())
-        .pll1_q_ck(200.MHz())
         .freeze(pwrcfg, &dp.SYSCFG);
 
     let gpioe = dp.GPIOE.split(ccdr.peripheral.GPIOE);

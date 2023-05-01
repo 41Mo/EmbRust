@@ -1,21 +1,14 @@
-use nb::block;
 use crate::hal::{
-    prelude::*,
     serial::{Rx, Tx},
-    stm32::*,
 };
-use core::sync::atomic::{AtomicPtr, Ordering};
+use core::sync::atomic::{AtomicPtr};
 
 pub struct UartType<T> {
-    tx: AtomicPtr<Tx<T>>,
-    rx: AtomicPtr<Rx<T>>,
+    pub tx: AtomicPtr<Tx<T>>,
+    pub rx: AtomicPtr<Rx<T>>,
 }
 
-pub static TELEM1: UartType<UART7> = UartType {
-    tx: AtomicPtr::new(core::ptr::null_mut()),
-    rx: AtomicPtr::new(core::ptr::null_mut()),
-};
-
+#[macro_export]
 macro_rules! uart_ops {
     ($usartX:ident) => {
         impl UartType<$usartX> {
@@ -39,8 +32,4 @@ macro_rules! uart_ops {
             }
         }
     };
-}
-
-uart_ops! {
-    UART7
 }

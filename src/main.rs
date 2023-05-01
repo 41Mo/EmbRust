@@ -5,19 +5,19 @@
 #![feature(alloc_error_handler)]
 
 mod led;
-mod periph;
-mod serial;
-mod tasks;
 
-use crate::periph::setup_periph;
+//#[cfg(board = "MatekH743")]
+mod periph;
+mod tasks;
+mod serial;
+
+use stm32h7xx_hal as hal;
+use crate::periph::{setup_periph, LEDS};
 use core::alloc::Layout;
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception, ExceptionFrame};
 use freertos_rust::*;
-use led::LEDS;
-use stm32h7xx_hal as hal;
 use tasks::{blink, default_task, telem1rw};
-
 extern crate panic_halt; // panic handler
 
 #[global_allocator]
@@ -63,7 +63,7 @@ fn delay_n(n: i32) {
 }
 
 #[exception]
-fn DefaultHandler(_irqn: i16) {
+unsafe fn DefaultHandler(_irqn: i16) {
     // custom default handler
     // irqn is negative for Cortex-M exceptions
     // irqn is positive for device specific (line IRQ)
@@ -74,7 +74,7 @@ fn DefaultHandler(_irqn: i16) {
 }
 
 #[exception]
-fn HardFault(_ef: &ExceptionFrame) -> ! {
+unsafe fn HardFault(_ef: &ExceptionFrame) -> ! {
     // Blink 3 times long when exception occures
     LEDS.off();
     delay_n(10000);

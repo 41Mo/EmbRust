@@ -1,9 +1,8 @@
-use crate::{serial::TELEM1, led::LEDS};
+use crate::periph::{LEDS, TELEM1};
 use freertos_rust::{Duration, CurrentTask};
 
 pub fn default_task() {
     loop {
-        cortex_m::asm::nop();
     }
 }
 
