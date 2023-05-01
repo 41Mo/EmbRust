@@ -5,6 +5,7 @@
 #![feature(alloc_error_handler)]
 
 use core::alloc::Layout;
+use core::fmt::Write;
 use cortex_m::asm;
 use cortex_m_rt::exception;
 use cortex_m_rt::{entry, ExceptionFrame};
@@ -15,28 +16,58 @@ use nb::block;
 use cortex_m;
 use stm32h7xx_hal as hal;
 
-pub use crate::hal::{
+use crate::hal::{
     gpio::*,
     pac,
     prelude::*,
-    serial::{Rx, Tx},
+    serial::{Rx, Serial, SerialExt, Tx},
+    stm32::*,
     time::*,
 };
 
-use core::{
-    sync::atomic::{AtomicPtr, Ordering},
-};
+use core::sync::atomic::{AtomicPtr, Ordering};
 
 extern crate panic_halt; // panic handler
 
 #[global_allocator]
 static GLOBAL: FreeRtosAllocator = FreeRtosAllocator;
 
-type UART7TXTYPE = Tx<hal::stm32::UART7>;
-type UART7RXTYPE = Rx<hal::stm32::UART7>;
+struct UartType<T> {
+    tx: AtomicPtr<Tx<T>>,
+    rx: AtomicPtr<Rx<T>>,
+}
 
-static UART7_RX_PTR: AtomicPtr<UART7RXTYPE> = AtomicPtr::new(core::ptr::null_mut());
-static UART7_TX_PTR: AtomicPtr<UART7TXTYPE> = AtomicPtr::new(core::ptr::null_mut());
+static SERIAL7: UartType<UART7> = UartType {
+    tx: AtomicPtr::new(core::ptr::null_mut()),
+    rx: AtomicPtr::new(core::ptr::null_mut()),
+};
+
+impl<T> UartType<T> {}
+
+macro_rules! uart_ops {
+    ($usartX:ident) => {
+        impl UartType<$usartX> {
+            pub fn from_serial(&self, mut serial: (Tx<$usartX>, Rx<$usartX>)) {
+                self.rx.store(&mut serial.1, Ordering::Relaxed);
+                self.tx.store(&mut serial.0, Ordering::Relaxed);
+            }
+            pub fn write(&self, byte: u8) {
+                unsafe {
+                    block!(self.tx.load(Ordering::Relaxed).as_mut().unwrap().write(byte)).unwrap()
+                }
+            }
+            fn read(&self) -> u8 {
+                unsafe {
+                    block!(self.rx.load(Ordering::Relaxed).as_mut().unwrap().read()).unwrap()
+                }
+            }
+        }
+    };
+}
+
+uart_ops! {
+    UART7
+}
 
 fn delay() {
     let mut _i = 0;
@@ -75,9 +106,8 @@ fn main() -> ! {
         .UART7
         .serial((tx, rx), 57_600.bps(), ccdr.peripheral.UART7, &ccdr.clocks)
         .unwrap();
-    let (mut tx, mut rx) = serial7.split();
-    UART7_RX_PTR.store(&mut rx, Ordering::Relaxed);
-    UART7_TX_PTR.store(&mut tx, Ordering::Relaxed);
+
+    SERIAL7.from_serial(serial7.split());
 
     Task::new()
         .name("Defaul")
@@ -90,24 +120,10 @@ fn main() -> ! {
 
     Task::new()
         .name("SerialWrite")
-        .stack_size(512)
+        .stack_size(128)
         .priority(TaskPriority(2))
         .start(move || loop {
-            unsafe {
-                let recieved = block!(UART7_RX_PTR
-                    .load(Ordering::Relaxed)
-                    .as_mut()
-                    .unwrap()
-                    .read())
-                .unwrap();
-
-                block!(UART7_TX_PTR
-                    .load(Ordering::Relaxed)
-                    .as_mut()
-                    .unwrap()
-                    .write(recieved))
-                .ok();
-            }
+            SERIAL7.write(SERIAL7.read());
         })
         .unwrap();
 
