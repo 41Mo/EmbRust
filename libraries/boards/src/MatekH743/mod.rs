@@ -1,8 +1,5 @@
 use core::marker::Sync;
-use core::{
-    cell::RefCell,
-    ops::{Deref, DerefMut},
-};
+
 
 use crate::hal::{
     device::UART7,
@@ -15,26 +12,19 @@ use crate::hal::{
 };
 use core::{
     option::{Option, Option::*},
-    ptr::null_mut,
-    result::Result::Ok,
     sync::atomic::{AtomicPtr, Ordering::Relaxed},
 };
 
 use lazy_static::lazy_static;
-use usb_device::{class_prelude::UsbBusAllocator, prelude::*};
+use usb_device::{prelude::*};
 use usbd_serial::SerialPort;
 
 extern crate alloc;
-use alloc::boxed::Box;
-use alloc::rc::{Rc, Weak};
+
+
 use alloc::sync::Arc;
-use spin::Mutex;
-pub use fugit::{
-    HertzU32 as Hertz, KilohertzU32 as KiloHertz, MegahertzU32 as MegaHertz,
-    MicrosDurationU32 as MicroSeconds, MillisDurationU32 as MilliSeconds,
-    NanosDurationU32 as NanoSeconds,
-};
-use cortex_m::peripheral::DWT;
+
+
 
 type led_blue_type = Pin<'E', 3, Output<PushPull>>;
 type led_green_type = Pin<'E', 4, Output<PushPull>>;
@@ -160,5 +150,5 @@ impl HALDATA {
 unsafe impl Sync for HALDATA {}
 
 lazy_static! {
-    pub static ref HAL: HALDATA = { HALDATA::new() };
+    pub static ref HAL: HALDATA = HALDATA::new();
 }

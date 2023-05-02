@@ -1,13 +1,11 @@
 use std::env;
-use std::path::PathBuf;
-use std::fs::copy;
 
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     #[cfg(feature = "matekh743")]
-    copy("libraries/boards/src/MatekH743/memory.x", PathBuf::from(out_dir.as_str()).join("memory.x"),).unwrap();
+    std::fs::copy("libraries/boards/src/MatekH743/memory.x", std::path::PathBuf::from(out_dir.as_str()).join("memory.x"),).unwrap();
     #[cfg(feature = "matekf411")]
-    copy("libraries/boards/src/MatekF411/memory.x", PathBuf::from(out_dir.as_str()).join("memory.x"),).unwrap();
+    std::fs::copy("libraries/boards/src/MatekF411/memory.x", std::path::PathBuf::from(out_dir.as_str()).join("memory.x"),).unwrap();
 
     let mut b = freertos_cargo_build::Builder::new();
 

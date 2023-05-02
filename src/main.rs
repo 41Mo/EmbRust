@@ -6,31 +6,21 @@
 
 mod tasks;
 
-use boards::{periph::HAL, MatekH743::HALDATA};
+use boards::periph::HAL;
 use core::{
     alloc::Layout,
-    sync::atomic::{self, AtomicPtr, Ordering},
+    sync::atomic::{AtomicPtr, Ordering},
 };
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception, ExceptionFrame};
 use freertos_rust::*;
-use tasks::{blink, default_task, telem1rw, usb_read};
+use tasks::{blink, usb_read};
+
 extern crate panic_halt; // panic handler
-
-use boards::hal::{
-    prelude::*,
-    stm32,
-    usb_hs::{UsbBus, USB2},
-};
-use usb_device::prelude::*;
-
 extern crate alloc;
-use alloc::boxed::Box;
-use alloc::sync::Arc;
-use core::{
-    mem::size_of,
-    ptr::{self, null_mut},
-};
+
+
+use core::ptr::null_mut;
 
 #[global_allocator]
 static GLOBAL: FreeRtosAllocator = FreeRtosAllocator;
@@ -118,9 +108,9 @@ fn alloc_error(_layout: Layout) -> ! {
 }
 
 #[no_mangle]
-fn vApplicationStackOverflowHook(_pxTask: FreeRtosTaskHandle, _pcTaskName: FreeRtosCharPtr) {
+fn vApplicationStackOverflowHook(_px_task: FreeRtosTaskHandle, _pc_task_name: FreeRtosCharPtr) {
     let lb = unsafe { HAL.led_blue.load(Ordering::Relaxed).as_mut().unwrap() };
-    let lg = unsafe { HAL.led_green.load(Ordering::Relaxed).as_mut().unwrap() };
+    let _lg = unsafe { HAL.led_green.load(Ordering::Relaxed).as_mut().unwrap() };
     for _ in 0..10 {
         lb.toggle();
         delay_n(1000);
