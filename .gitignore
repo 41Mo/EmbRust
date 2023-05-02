@@ -1,1 +1,7 @@
 /target
+.cargo
+.nvim
+.vscode
+libraries/boards/target
+libraries/boards/Cargo.lock
+Cargo.lock
