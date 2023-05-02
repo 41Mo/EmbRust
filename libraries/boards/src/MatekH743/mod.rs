@@ -29,6 +29,12 @@ use alloc::boxed::Box;
 use alloc::rc::{Rc, Weak};
 use alloc::sync::Arc;
 use spin::Mutex;
+pub use fugit::{
+    HertzU32 as Hertz, KilohertzU32 as KiloHertz, MegahertzU32 as MegaHertz,
+    MicrosDurationU32 as MicroSeconds, MillisDurationU32 as MilliSeconds,
+    NanosDurationU32 as NanoSeconds,
+};
+use cortex_m::peripheral::DWT;
 
 type led_blue_type = Pin<'E', 3, Output<PushPull>>;
 type led_green_type = Pin<'E', 4, Output<PushPull>>;
@@ -46,6 +52,43 @@ pub struct HALDATA {
     pub telem1: AtomicPtr<Serial<UART7>>,
     pub usb: Option<AtomicPtr<USB<'static>>>,
 }
+// impl From<NanoSeconds> for Duration {
+//     fn from(ns: NanoSeconds) -> Self {
+//         Self::from_nanos(ns.0 as u64)
+//     }
+// }
+//
+// /// A monotonic nondecreasing timer
+// #[derive(Clone, Copy)]
+// pub struct MonoTimer {
+//     frequency: Hertz,
+// }
+//
+// impl MonoTimer {
+//     /// Creates a new `Monotonic` timer
+//     pub fn new(mut dwt: DWT, clocks: Clocks) -> Self {
+//         dwt.enable_cycle_counter();
+//
+//         // now the CYCCNT counter can't be stopped or resetted
+//         drop(dwt);
+//
+//         MonoTimer {
+//             frequency: clocks.sysclk(),
+//         }
+//     }
+//
+//     /// Returns the frequency at which the monotonic timer is operating at
+//     pub fn frequency(&self) -> Hertz {
+//         self.frequency
+//     }
+//
+//     /// Returns an `Instant` corresponding to "now"
+//     pub fn now(&self) -> Instant {
+//         Instant {
+//             now: DWT::cycle_count(),
+//         }
+//     }
+// }
 
 static mut EP_MEMORY: [u32; 1024] = [0; 1024];
 
