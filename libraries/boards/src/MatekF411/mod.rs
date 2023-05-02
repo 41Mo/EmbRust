@@ -55,5 +55,13 @@ pub fn setup_periph() {
         u8,
     > = dp.USART1.serial((tx, rx), 57_600.bps(), &clocks).unwrap();
 
+    let mut usb_serial = usbd_serial::SerialPort::new();
+    let mut usb_dev = UsbDeviceBuilder::new(, UsbVidPid(0x16c0, 0x27dd)
+        .manufacturer("Fake company")
+        .product("Serial port")
+        .serial_number("TEST PORT 2")
+        .device_class(usbd_serial::USB_CLASS_CDC)
+        .build());
+
     TELEM1.from_serial(serial1.split());
 }

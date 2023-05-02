@@ -1,6 +1,16 @@
-
-use boards::periph::{HAL, write_serial};
+use boards::periph::{write_serial, HAL};
 use freertos_rust::{CurrentTask, Duration};
+
+use boards::hal::{
+    prelude::*,
+    stm32,
+    usb_hs::{UsbBus, USB2},
+};
+use usb_device::prelude::*;
+
+extern crate alloc;
+use alloc::boxed::Box;
+use core::{ptr::{self, null_mut}, mem::size_of};
 
 pub fn default_task() {
     loop {}
@@ -22,25 +32,9 @@ pub fn blink() {
     }
 }
 
-pub fn usb_read() {
-    let usb_bus = unsafe { HAL.take_usb_bus().unwrap() };
-    let mut usb_serial = usbd_serial::SerialPort::new(&usb_bus);
-    let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x16c0, 0x27dd))
-        .manufacturer("Fake company")
-        .product("Serial port")
-        .serial_number("TEST PORT 2")
-        .device_class(usbd_serial::USB_CLASS_CDC)
-        .build();
-    //
-    // loop {
-    //     if usb_dev.poll(&mut [&mut usb_serial]) {
-    //         match usb_serial.read(&mut buf) {
-    //             Ok(count) if count > 0 => {
-    //                 // Write to both ports
-    //                 write_serial(&mut usb_serial, &buf, count);
-    //             }
-    //             _ => {}
-    //         }
-    //     }
-    // }
+pub fn get_usb() {
+}
+
+pub fn usb_read()
+{
 }

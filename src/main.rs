@@ -7,7 +7,10 @@
 mod tasks;
 
 use boards::periph::{HAL, HALDATA};
-use core::alloc::Layout;
+use core::{
+    alloc::Layout,
+    sync::atomic::{self, AtomicPtr, Ordering},
+};
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception, ExceptionFrame};
 use freertos_rust::*;
@@ -21,45 +24,110 @@ use boards::hal::{
 };
 use usb_device::prelude::*;
 
+extern crate alloc;
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use core::{
+    mem::size_of,
+    ptr::{self, null_mut},
+};
+
 #[global_allocator]
 static GLOBAL: FreeRtosAllocator = FreeRtosAllocator;
+static mut EP_MEMORY: [u32; 1024] = [0; 1024];
 
 #[entry]
 fn main() -> ! {
     let mut hd: HALDATA = HALDATA::setup();
+
     unsafe {
         HAL.freeze(&mut hd);
     }
 
-    //
-    // let mut buf = [0u8; 64];
+    let mut usb_bus = UsbBus::new(hd.usb, unsafe { &mut EP_MEMORY });
+    let ap = AtomicPtr::new(null_mut());
+    ap.store(&mut usb_bus, Ordering::Relaxed);
+    let ausb_bus = Arc::new(ap);
+    let t1 = unsafe { ausb_bus.as_ref().load(Ordering::Relaxed).as_ref().unwrap() };
 
-    // Task::new()
-    //     .name("Default")
-    //     .stack_size(1)
-    //     .priority(TaskPriority(1))
-    //     .start(default_task)
-    //     .unwrap();
-    //
-    // Task::new()
-    //     .name("SerialWrite")
-    //     .stack_size(256)
-    //     .priority(TaskPriority(2))
-    //     .start(telem1rw)
-    //     .unwrap();
+    let mut serial = usbd_serial::SerialPort::new(t1);
+    let mut usb_dev = UsbDeviceBuilder::new(t1, UsbVidPid(0x16c0, 0x27dd))
+        .manufacturer("Fake company")
+        .product("Serial port")
+        .serial_number("TEST PORT 2")
+        .device_class(usbd_serial::USB_CLASS_CDC)
+        .build();
+
+    let ap = AtomicPtr::new(null_mut());
+    ap.store(&mut serial, Ordering::Relaxed);
+    let shared_usb_serial = Arc::new(ap);
+    let ap = AtomicPtr::new(null_mut());
+    ap.store(&mut usb_dev, Ordering::Relaxed);
+    let shared_usb_dev = Arc::new(ap);
+
+
+    Task::new()
+        .name("SerialWrite")
+        .stack_size(256)
+        .priority(TaskPriority(1))
+        .start(telem1rw)
+        .unwrap();
 
     Task::new()
         .name("Blinky")
         .stack_size(128)
-        .priority(TaskPriority(2))
+        .priority(TaskPriority(1))
         .start(blink)
         .unwrap();
-
     Task::new()
         .name("Telem0")
         .stack_size(1024)
         .priority(TaskPriority(1))
-        .start(usb_read)
+        .start(move || {
+            let usb_dev = unsafe {
+                shared_usb_dev
+                    .as_ref()
+                    .load(Ordering::Relaxed)
+                    .as_mut()
+                    .unwrap()
+            };
+            let serial = unsafe {
+                shared_usb_serial
+                    .as_ref()
+                    .load(Ordering::Relaxed)
+                    .as_mut()
+                    .unwrap()
+            };
+            loop {
+                if !usb_dev.poll(&mut [serial]) {
+                    continue;
+                }
+
+                let mut buf = [0u8; 64];
+
+                match serial.read(&mut buf) {
+                    Ok(count) if count > 0 => {
+                        // Echo back in upper case
+                        for c in buf[0..count].iter_mut() {
+                            if 0x61 <= *c && *c <= 0x7a {
+                                *c &= !0x20;
+                            }
+                        }
+
+                        let mut write_offset = 0;
+                        while write_offset < count {
+                            match serial.write(&buf[write_offset..count]) {
+                                Ok(len) if len > 0 => {
+                                    write_offset += len;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        })
         .unwrap();
 
     FreeRtosUtils::start_scheduler();
