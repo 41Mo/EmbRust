@@ -17,7 +17,7 @@ lazy_static = {version= "1.0", features=["spin_no_std"]}
 
 [features]
 # fefault for debug purposes
-# default = ["matekh743"]
+default = ["matekh743"]
 device-selected = []
 matekh743 = ["device-selected", "stm32h7xx-hal/stm32h743", "stm32h7xx-hal/rt", "stm32h7xx-hal/usb_hs", "stm32h7xx-hal/rm0433"]
 matekf411 = ["device-selected", "stm32f4xx-hal/stm32f411"]

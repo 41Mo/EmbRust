@@ -15,7 +15,7 @@ lazy_static = {version= "1.0", features=["spin_no_std"]}
 
 [features]
 # default for debug purposes
-# default = ["matekh743"]
+default = ["matekh743"]
 matekh743 = ["boards/matekh743"]
 #matekf411 = ["boards/matekf411"]
 

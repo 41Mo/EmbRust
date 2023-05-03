@@ -16,15 +16,13 @@ use cortex_m_rt::{entry, exception, ExceptionFrame};
 use freertos_rust::*;
 use tasks::{blink, usb_read};
 
-extern crate panic_halt; // panic handler
 extern crate alloc;
-
+extern crate panic_halt; // panic handler
 
 use core::ptr::null_mut;
 
 #[global_allocator]
 static GLOBAL: FreeRtosAllocator = FreeRtosAllocator;
-
 
 fn delay_n(n: i32) {
     for _ in 0..n {
@@ -38,8 +36,8 @@ fn delay_n(n: i32) {
 }
 
 pub struct TaskHandles {
-    t1:AtomicPtr<Task>,
-    t2:AtomicPtr<Task>,
+    t1: AtomicPtr<Task>,
+    t2: AtomicPtr<Task>,
 }
 
 lazy_static::lazy_static! {
@@ -50,18 +48,20 @@ lazy_static::lazy_static! {
 fn main() -> ! {
     lazy_static::initialize(&HAL);
 
-    let mut t2 = Task::new()
+    let mut t1 = Task::new()
         .name("Blinky")
-        .stack_size(256)
+        .priority(TaskPriority(3))
+        .stack_size(512)
         .start(blink)
         .unwrap();
-    let mut t1 = Task::new()
+    TASK_HANDLES.t1.store(&mut t1, Ordering::Relaxed);
+
+    let mut t2 = Task::new()
         .name("Telem0")
-        .stack_size(1024)
+        .stack_size(700)
+        .priority(TaskPriority(1))
         .start(usb_read)
         .unwrap();
-
-    TASK_HANDLES.t1.store(&mut t1, Ordering::Relaxed);
     TASK_HANDLES.t2.store(&mut t2, Ordering::Relaxed);
 
     FreeRtosUtils::start_scheduler();
@@ -102,8 +102,8 @@ fn alloc_error(_layout: Layout) -> ! {
 
     asm::bkpt();
     loop {
-    //     lb.toggle();
-    //     lg.toggle();
+        //     lb.toggle();
+        //     lg.toggle();
     }
 }
 

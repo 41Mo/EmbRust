@@ -3,7 +3,7 @@ use freertos_rust::{CurrentTask, Duration, DurationTicks};
 
 extern crate alloc;
 use crate::TASK_HANDLES;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 
 pub fn blink() {
     let led = unsafe {
@@ -57,16 +57,24 @@ pub fn usb_read() {
         let now = unsafe { freertos_rust::freertos_rs_xTaskGetTickCount() };
 
         if now - last_wake_time > Duration::ms(1000).to_ticks() {
-            let t1 = unsafe {
+            let t = unsafe {
                 TASK_HANDLES
-                    .t1
+                    .t2
                     .load(core::sync::atomic::Ordering::Relaxed)
                     .as_ref()
-                    .unwrap()
             };
 
-            let name = t1.get_name().unwrap();
-            let stack_usage = t1.get_stack_high_water_mark();
+            let t = match t {
+                Some(t) => t,
+                None => continue,
+            };
+
+            let name = match t.get_name() {
+                Ok(s) => s,
+                Err(e) => String::from("task 1 name unknown"),
+            };
+
+            let stack_usage = t.get_stack_high_water_mark();
 
             let buf = [
                 "Task:",
@@ -76,6 +84,7 @@ pub fn usb_read() {
                 "\n",
             ]
             .join(" ");
+
             let buf = buf.as_bytes();
             let mut write_offset = 0;
             let count = buf.len();
