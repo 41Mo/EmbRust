@@ -13,12 +13,11 @@ use core::{
     option::{Option, Option::*},
     sync::atomic::{AtomicPtr, Ordering::Relaxed},
 };
-
-use lazy_static::lazy_static;
 use usb_device::prelude::*;
 use usbd_serial::SerialPort;
 
 use alloc::sync::Arc;
+use lazy_static::lazy_static;
 
 type led_blue_type = Pin<'E', 3, Output<PushPull>>;
 type led_green_type = Pin<'E', 4, Output<PushPull>>;
@@ -26,8 +25,8 @@ type led_green_type = Pin<'E', 4, Output<PushPull>>;
 pub struct USBREF {}
 
 pub struct USB<'a> {
-    pub serial: SerialPort<'a, UsbBus<USB2>>,
-    pub device: UsbDevice<'a, UsbBus<USB2>>,
+    serial: SerialPort<'a, UsbBus<USB2>>,
+    device: UsbDevice<'a, UsbBus<USB2>>,
 }
 
 pub struct HALDATA {
@@ -36,11 +35,74 @@ pub struct HALDATA {
     pub telem1: AtomicPtr<Serial<UART7>>,
     pub usb: Option<AtomicPtr<USB<'static>>>,
 }
+use core::fmt;
+
+// #[macro_export]
+// macro_rules! console_print {
+//     ($($arg:tt)*) => ($crate::MatekH743::_print(format_args!($($arg)*)));
+// }
+//
+// #[macro_export]
+// macro_rules! console_println {
+//     () => ($crate::console_print!("\n"));
+//     ($($arg:tt)*) => ($crate::console_print!("{}\n", format_args!($($arg)*)));
+// }
+
+impl<'a> USB<'a> {
+    pub fn print(&mut self, args: fmt::Arguments) {
+        let string = alloc::format!("{}", args);
+        let buf = string.as_bytes();
+        let mut write_offset = 0;
+        let count = buf.len();
+        while write_offset < count {
+            match self.serial.write(&buf[write_offset..count]) {
+                Ok(len) if len > 0 => {
+                    write_offset += len;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn read_polling() {
+        todo!()
+        // if usb_dev.poll(&mut [serial]) {
+        //     let mut buf = [0u8; 64];
+        //
+        //     match serial.read(&mut buf) {
+        //         Ok(count) if count > 0 => {
+        //             // Echo back in upper case
+        //             for c in buf[0..count].iter_mut() {
+        //                 if 0x61 <= *c && *c <= 0x7a {
+        //                     *c &= !0x20;
+        //                 }
+        //             }
+        //             let mut write_offset = 0;
+        //             while write_offset < count {
+        //                 match serial.write(&buf[write_offset..count]) {
+        //                     Ok(len) if len > 0 => {
+        //                         write_offset += len;
+        //                     }
+        //                     _ => {}
+        //                 }
+        //             }
+        //         }
+        //         _ => {}
+        //     }
+        // }
+    }
+
+    pub fn poll(&mut self) -> bool {
+        self.device.poll(&mut [&mut self.serial])
+    }
+
+}
+
 
 static mut EP_MEMORY: [u32; 1024] = [0; 1024];
 
 impl HALDATA {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let dp = pac::Peripherals::take().unwrap();
         let pwrcfg = dp.PWR.constrain().freeze();
         let rcc = dp.RCC.constrain();
@@ -100,6 +162,14 @@ impl HALDATA {
                     device: usb_dev,
                 }))
             },
+        }
+    }
+
+
+    pub fn take_usb(&self) -> Option<&'static mut USB>  {
+        match self.usb.as_ref() {
+            Some(ap) => unsafe { ap.load(Relaxed).as_mut() }
+            None => None,
         }
     }
 }

@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
+#![crate_type = "staticlib"]
 
 #[cfg(not(feature = "device-selected"))]
 core::compile_error!(

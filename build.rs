@@ -15,6 +15,8 @@ fn main() {
 
     #[cfg(feature = "matekh743")]
     b.freertos_port("GCC/ARM_CM7/r0p1".to_string()); // Port dir relativ to 'FreeRTOS-Kernel/portable' 
+    // b.freertos_port("GCC/ARM_CM4F".to_string()); // Port dir relativ to 'FreeRTOS-Kernel/portable' 
+    
                                                      //
     // #[cfg(feature = "matekf411")]
     // b.freertos_port("GCC/ARM_CM7/r0p1".to_string()); // Port dir relativ to 'FreeRTOS-Kernel/portable' 

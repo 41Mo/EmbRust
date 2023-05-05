@@ -14,15 +14,34 @@ use core::{
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception, ExceptionFrame};
 use freertos_rust::*;
-use tasks::{blink, usb_read};
+use tasks::{blink, console};
 
 extern crate alloc;
 extern crate panic_halt; // panic handler
 
+use alloc::alloc::GlobalAlloc;
+use alloc::*;
 use core::ptr::null_mut;
 
+pub struct CustomAllocator {}
+
+static mut ALLOCATED_MEM: usize = 0;
+
+unsafe impl GlobalAlloc for CustomAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        ALLOCATED_MEM += layout.size();
+        let res = freertos_rs_pvPortMalloc(layout.size() as u32);
+        return res as *mut u8;
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        ALLOCATED_MEM -= _layout.size();
+        freertos_rs_vPortFree(ptr as FreeRtosVoidPtr)
+    }
+}
+
 #[global_allocator]
-static GLOBAL: FreeRtosAllocator = FreeRtosAllocator;
+static GLOBAL: CustomAllocator = CustomAllocator {};
 
 fn delay_n(n: i32) {
     for _ in 0..n {
@@ -47,22 +66,21 @@ lazy_static::lazy_static! {
 #[entry]
 fn main() -> ! {
     lazy_static::initialize(&HAL);
+    asm::bkpt();
 
-    let mut t1 = Task::new()
+    Task::new()
         .name("Blinky")
-        .priority(TaskPriority(3))
-        .stack_size(512)
+        .stack_size(256)
+        .priority(TaskPriority(1))
         .start(blink)
         .unwrap();
-    TASK_HANDLES.t1.store(&mut t1, Ordering::Relaxed);
 
-    let mut t2 = Task::new()
+    Task::new()
         .name("Telem0")
-        .stack_size(700)
+        .stack_size(10*1024/4)
         .priority(TaskPriority(1))
-        .start(usb_read)
+        .start(console)
         .unwrap();
-    TASK_HANDLES.t2.store(&mut t2, Ordering::Relaxed);
 
     FreeRtosUtils::start_scheduler();
 }
@@ -108,7 +126,7 @@ fn alloc_error(_layout: Layout) -> ! {
 }
 
 #[no_mangle]
-fn vApplicationStackOverflowHook(_px_task: FreeRtosTaskHandle, _pc_task_name: FreeRtosCharPtr) {
+fn vApplicationStackOverflowHook(pxTask: FreeRtosTaskHandle, pcTaskName: FreeRtosCharPtr) {
     let lb = unsafe { HAL.led_blue.load(Ordering::Relaxed).as_mut().unwrap() };
     let _lg = unsafe { HAL.led_green.load(Ordering::Relaxed).as_mut().unwrap() };
     for _ in 0..10 {
