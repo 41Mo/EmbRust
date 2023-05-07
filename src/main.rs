@@ -15,7 +15,7 @@ use core::{
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception, ExceptionFrame};
 use freertos_rust::*;
-use tasks::{blink, console, empty_task};
+use tasks::{blink, console, usb_poll_task};
 
 extern crate alloc;
 extern crate panic_halt; // panic handler
@@ -77,7 +77,7 @@ fn main() -> ! {
         .name("UsbPoll")
         .stack_size(10000_u16.bytes_to_words())
         .priority(TaskPriority(1))
-        .start(empty_task)
+        .start(usb_poll_task)
         .expect("UnableToCreateTask");
 
     FreeRtosUtils::start_scheduler();

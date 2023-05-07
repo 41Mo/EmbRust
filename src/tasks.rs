@@ -40,7 +40,7 @@ static GLOBAL_QUEUE: AtomicPtr<Queue<TasksData>> = AtomicPtr::new(null_mut());
 static USB_READY: AtomicBool = AtomicBool::new(false);
 static POLL_TICKS: AtomicU32 = AtomicU32::new(1);
 
-pub fn empty_task() {
+pub fn usb_poll_task() {
     let mut last_send_time = unsafe { freertos_rust::freertos_rs_xTaskGetTickCount() };
     let mut task_delay = TaskDelay::new();
     let mut task_run_count = 0;
