@@ -6,22 +6,23 @@
 
 mod tasks;
 
-use boards::periph::HAL;
+use boards::periph::{HAL, ExtU16};
+use core;
 use core::{
     alloc::Layout,
-    sync::atomic::{AtomicPtr, Ordering},
+    sync::atomic::Ordering,
 };
 use cortex_m::asm;
 use cortex_m_rt::{entry, exception, ExceptionFrame};
 use freertos_rust::*;
-use tasks::{blink, console};
+use tasks::{blink, console, empty_task};
 
 extern crate alloc;
 extern crate panic_halt; // panic handler
 
 use alloc::alloc::GlobalAlloc;
-use alloc::*;
-use core::ptr::null_mut;
+
+
 
 pub struct CustomAllocator {}
 
@@ -29,19 +30,19 @@ static mut ALLOCATED_MEM: usize = 0;
 
 unsafe impl GlobalAlloc for CustomAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        // ALLOCATED_MEM += layout.size();
+        ALLOCATED_MEM += layout.size();
         let res = freertos_rs_pvPortMalloc(layout.size() as u32);
         return res as *mut u8;
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        // ALLOCATED_MEM -= _layout.size();
+        ALLOCATED_MEM -= _layout.size();
         freertos_rs_vPortFree(ptr as FreeRtosVoidPtr)
     }
 }
 
 #[global_allocator]
-static GLOBAL: FreeRtosAllocator = FreeRtosAllocator {};
+static GLOBAL: CustomAllocator = CustomAllocator {};
 
 fn delay_n(n: i32) {
     for _ in 0..n {
@@ -54,33 +55,30 @@ fn delay_n(n: i32) {
     }
 }
 
-pub struct TaskHandles {
-    t1: AtomicPtr<Task>,
-    t2: AtomicPtr<Task>,
-}
-
-lazy_static::lazy_static! {
-    pub static ref TASK_HANDLES:TaskHandles = TaskHandles{t1:AtomicPtr::new(null_mut()), t2:AtomicPtr::new(null_mut())};
-}
-
 #[entry]
 fn main() -> ! {
     lazy_static::initialize(&HAL);
-    // asm::bkpt();
 
     Task::new()
         .name("Blinky")
-        .stack_size(256)
+        .stack_size(740_u16.bytes_to_words())
         .priority(TaskPriority(1))
         .start(blink)
-        .unwrap();
+        .expect("UnableToCreateTask");
 
     Task::new()
         .name("Telem0")
-        .stack_size(10*1024/4)
+        .stack_size(2400_u16.bytes_to_words())
         .priority(TaskPriority(1))
         .start(console)
-        .unwrap();
+        .expect("UnableToCreateTask");
+
+    Task::new()
+        .name("Empty")
+        .stack_size(400_u16.bytes_to_words())
+        .priority(TaskPriority(1))
+        .start(empty_task)
+        .expect("UnableToCreateTask");
 
     FreeRtosUtils::start_scheduler();
 }
@@ -126,7 +124,7 @@ fn alloc_error(_layout: Layout) -> ! {
 }
 
 #[no_mangle]
-fn vApplicationStackOverflowHook(pxTask: FreeRtosTaskHandle, pcTaskName: FreeRtosCharPtr) {
+fn vApplicationStackOverflowHook(_pxTask: FreeRtosTaskHandle, _pcTaskName: FreeRtosCharPtr) {
     let lb = unsafe { HAL.led_blue.load(Ordering::Relaxed).as_mut().unwrap() };
     let _lg = unsafe { HAL.led_green.load(Ordering::Relaxed).as_mut().unwrap() };
     for _ in 0..10 {

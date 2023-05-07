@@ -18,13 +18,11 @@ use core::{
     sync::atomic::{
         AtomicPtr, AtomicU32,
         Ordering::{Relaxed, SeqCst},
-    }, borrow::{BorrowMut, Borrow},
+    },
 };
 use usb_device::prelude::*;
 use usbd_serial::SerialPort;
-
 use cortex_m::interrupt::Mutex;
-
 use alloc::sync::Arc;
 use lazy_static::lazy_static;
 
@@ -44,6 +42,23 @@ pub struct HALDATA {
     pub telem1: AtomicPtr<Serial<UART7>>,
     pub usb: Option<AtomicPtr<USB<'static>>>,
 }
+
+pub trait ExtU16 {
+    fn bytes_to_words(self) -> u16;
+    fn words_to_bytes(self) -> u16;
+}
+
+impl ExtU16 for u16 {
+    #[inline]
+    fn bytes_to_words(self) -> u16 {
+        self / 4
+    }
+    #[inline]
+    fn words_to_bytes(self) -> u16 {
+        self * 4
+    }
+}
+
 use core::fmt;
 
 static TIMER: Mutex<RefCell<Option<timer::Timer<pac::TIM2>>>> = Mutex::new(RefCell::new(None));

@@ -1,26 +1,17 @@
-use boards;
-use boards::periph::{setup_tim2_callback, timestamp, HAL};
-use freertos_rust::{CurrentTask, Duration, DurationTicks, FreeRtosSchedulerState, Queue};
-extern crate alloc;
-use crate::alloc::string::ToString;
-use crate::TASK_HANDLES;
-use alloc::boxed::Box;
-use alloc::fmt::Arguments;
-use alloc::string::String;
-use core::alloc::Layout;
-use core::borrow::{Borrow, BorrowMut};
-use core::cell::RefCell;
-use core::format_args;
-use core::mem::size_of;
-use core::ptr::null_mut;
-use core::sync::atomic::Ordering::Relaxed;
-use core::sync::atomic::{AtomicPtr, AtomicU32};
-use alloc::fmt;
+use boards::periph::HAL;
+use freertos_rust::{CurrentTask, Duration, DurationTicks, Queue};
+use crate::alloc::{fmt, string::ToString};
+use crate::core::{
+    format_args,
+    ptr::null_mut,
+    sync::atomic::{AtomicPtr, Ordering::Relaxed},
+};
 
 #[derive(Copy, Clone)]
 enum TasksNum {
-   Task1,
-   Task2
+    Task1,
+    Task2,
+    Task3,
 }
 
 #[derive(Copy, Clone)]
@@ -34,14 +25,32 @@ impl fmt::Display for TasksData {
         let task_name = match self.num {
             TasksNum::Task1 => "Blinky",
             TasksNum::Task2 => "Usb",
+            TasksNum::Task3 => "EmptyTask"
         };
-        write!(f, "Task {}:\n\t mem: {}", task_name, self.min_free_mem)
+        write!(f, "Task {}:\n\t max_free_mem: {} bytes", task_name, self.min_free_mem*4)
     }
 }
 
 static GLOBAL_QUEUE: AtomicPtr<Queue<TasksData>> = AtomicPtr::new(null_mut());
 
-static TV: AtomicU32 = AtomicU32::new(0);
+pub fn empty_task() {
+    loop {
+        match unsafe { GLOBAL_QUEUE.load(Relaxed).as_ref() } {
+            Some(q) => {
+                let min_free_mem = CurrentTask::get_stack_high_water_mark();
+                let _ = q.send(
+                    TasksData {
+                        num: TasksNum::Task3,
+                        min_free_mem,
+                    },
+                    Duration::ms(1000),
+                );
+            }
+            None => (),
+        }
+        CurrentTask::delay(Duration::ms(1000));
+    }
+}
 
 pub fn blink() {
     loop {
@@ -53,8 +62,14 @@ pub fn blink() {
 
         match unsafe { GLOBAL_QUEUE.load(Relaxed).as_ref() } {
             Some(q) => {
-                let min_free_mem = unsafe { CurrentTask::get_stack_high_water_mark() };
-                let _ = q.send(TasksData { num: TasksNum::Task1, min_free_mem }, Duration::ms(1000));
+                let min_free_mem = CurrentTask::get_stack_high_water_mark();
+                let _ = q.send(
+                    TasksData {
+                        num: TasksNum::Task1,
+                        min_free_mem,
+                    },
+                    Duration::ms(1000),
+                );
             }
             None => (),
         }
@@ -98,7 +113,10 @@ pub fn console() {
             }
         };
 
-        let cinfo = TasksData{num: TasksNum::Task2, min_free_mem: unsafe { CurrentTask::get_stack_high_water_mark() }};
+        let cinfo = TasksData {
+            num: TasksNum::Task2,
+            min_free_mem: CurrentTask::get_stack_high_water_mark(),
+        };
 
         usb.print(format_args!("{}\n{}\n", _msg, cinfo.to_string()));
 
