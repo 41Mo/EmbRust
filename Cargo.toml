@@ -1,5 +1,5 @@
 [package]
-name = "freertos_test"
+name = "frtosrs"
 version = "0.1.0"
 edition = "2021"
 
@@ -23,6 +23,6 @@ matekh743 = ["boards/matekh743"]
 freertos-cargo-build = "*"
 
 [[bin]]
-name = "freertos_test"
+name = "frtosrs"
 test=false
 bench=false

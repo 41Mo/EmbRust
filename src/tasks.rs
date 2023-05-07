@@ -1,5 +1,3 @@
-use core::cell::RefCell;
-
 use crate::alloc::{fmt, string::ToString};
 use crate::core::{
     format_args,
@@ -7,7 +5,7 @@ use crate::core::{
     sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, Ordering::Relaxed},
 };
 use boards::periph::HAL;
-use freertos_rust::{CurrentTask, Duration, DurationTicks, Queue, TaskDelay, TaskDelayPeriodic};
+use freertos_rust::{CurrentTask, Duration, DurationTicks, Queue, TaskDelay};
 
 #[derive(Copy, Clone)]
 enum TasksNum {
@@ -26,8 +24,8 @@ impl fmt::Display for TasksData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let task_name = match self.num {
             TasksNum::Task1 => "Blinky",
-            TasksNum::Task2 => "Usb",
-            TasksNum::Task3 => "EmptyTask",
+            TasksNum::Task2 => "UsbConsole",
+            TasksNum::Task3 => "UsbPoll",
         };
         write!(
             f,
@@ -40,7 +38,7 @@ impl fmt::Display for TasksData {
 
 static GLOBAL_QUEUE: AtomicPtr<Queue<TasksData>> = AtomicPtr::new(null_mut());
 static USB_READY: AtomicBool = AtomicBool::new(false);
-static POLL_TICKS: AtomicU32 = AtomicU32::new(0);
+static POLL_TICKS: AtomicU32 = AtomicU32::new(1);
 
 pub fn empty_task() {
     let mut last_send_time = unsafe { freertos_rust::freertos_rs_xTaskGetTickCount() };
@@ -120,57 +118,55 @@ fn usb_comm() {
 
     let q = unsafe { GLOBAL_QUEUE.load(Relaxed).as_ref() }.expect("Queue ptr null");
 
-    let _msg = match q.receive(Duration::ms(1)) {
-        Ok(data) => data.to_string(),
-        Err(e) => {
-            let err = match e {
-                freertos_rust::FreeRtosError::OutOfMemory => "OOM",
-                freertos_rust::FreeRtosError::QueueSendTimeout => "send Timeout",
-                freertos_rust::FreeRtosError::QueueReceiveTimeout => return,
-                freertos_rust::FreeRtosError::MutexTimeout => "mutexTimeout",
-                freertos_rust::FreeRtosError::Timeout => "timeout",
-                freertos_rust::FreeRtosError::QueueFull => "queueFull",
-                freertos_rust::FreeRtosError::StringConversionError => "string conv err",
-                freertos_rust::FreeRtosError::TaskNotFound => "task not found",
-                freertos_rust::FreeRtosError::InvalidQueueSize => "invalid size",
-                freertos_rust::FreeRtosError::ProcessorHasShutDown => "processor shutdown",
-            };
-            HAL.usb_print(format_args!("Queue err: {}\n", err));
-            return;
-        }
-    };
-
-    let ticks = POLL_TICKS.load(core::sync::atomic::Ordering::SeqCst);
-    let freq = 1000 / Duration::ticks(ticks).to_ms();
-    HAL.usb_print(format_args!("{}\n", _msg));
-    HAL.usb_print(format_args!("Usb poll freq: {}\n", (freq).to_string()));
+    loop {
+        match q.receive(Duration::ms(1)) {
+            Ok(data) => {
+                HAL.usb_print(format_args!("{}\n", data.to_string()));
+            }
+            Err(e) => {
+                let err = match e {
+                    freertos_rust::FreeRtosError::OutOfMemory => "OOM",
+                    freertos_rust::FreeRtosError::QueueSendTimeout => "send Timeout",
+                    freertos_rust::FreeRtosError::QueueReceiveTimeout => return,
+                    freertos_rust::FreeRtosError::MutexTimeout => "mutexTimeout",
+                    freertos_rust::FreeRtosError::Timeout => "timeout",
+                    freertos_rust::FreeRtosError::QueueFull => "queueFull",
+                    freertos_rust::FreeRtosError::StringConversionError => "string conv err",
+                    freertos_rust::FreeRtosError::TaskNotFound => "task not found",
+                    freertos_rust::FreeRtosError::InvalidQueueSize => "invalid size",
+                    freertos_rust::FreeRtosError::ProcessorHasShutDown => "processor shutdown",
+                };
+                HAL.usb_print(format_args!("Queue err: {}\n", err));
+                return;
+            }
+        };
+    }
 }
 
 pub fn console() {
     let mut mq = Queue::<TasksData>::new(5).expect("Unable to create queue");
     GLOBAL_QUEUE.store(&mut mq, Relaxed);
     let mut task_delay = TaskDelay::new();
-    let mut last_send_time = unsafe { freertos_rust::freertos_rs_xTaskGetTickCount() };
 
     loop {
         usb_comm();
-        let now = unsafe { freertos_rust::freertos_rs_xTaskGetTickCount() };
-        if now - last_send_time > 1000 {
-            let q = unsafe { GLOBAL_QUEUE.load(Relaxed).as_ref() }.expect("Queue ptr null");
 
-            match q.send(
-                TasksData {
-                    num: TasksNum::Task2,
-                    min_free_mem: CurrentTask::get_stack_high_water_mark(),
-                },
-                Duration::ms(2),
-            ) {
-                Ok(_) => (),
-                Err(_) => (),
-            }
-            last_send_time = now;
+        let q = unsafe { GLOBAL_QUEUE.load(Relaxed).as_ref() }.expect("Queue ptr null");
+
+        match q.send(
+            TasksData {
+                num: TasksNum::Task2,
+                min_free_mem: CurrentTask::get_stack_high_water_mark(),
+            },
+            Duration::ms(2),
+        ) {
+            Ok(_) => (),
+            Err(_) => (),
         }
 
-        task_delay.delay_until(Duration::ms(200));
+        let ticks = POLL_TICKS.load(core::sync::atomic::Ordering::SeqCst);
+        let freq = 1000 / Duration::ticks(ticks).to_ms();
+        HAL.usb_print(format_args!("Usb poll freq: {}\n", (freq).to_string()));
+        task_delay.delay_until(Duration::ms(5000));
     }
 }

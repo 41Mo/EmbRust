@@ -74,7 +74,7 @@ fn main() -> ! {
         .expect("UnableToCreateTask");
 
     Task::new()
-        .name("Empty")
+        .name("UsbPoll")
         .stack_size(10000_u16.bytes_to_words())
         .priority(TaskPriority(1))
         .start(empty_task)
