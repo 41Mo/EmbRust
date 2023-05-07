@@ -29,19 +29,19 @@ static mut ALLOCATED_MEM: usize = 0;
 
 unsafe impl GlobalAlloc for CustomAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        ALLOCATED_MEM += layout.size();
+        // ALLOCATED_MEM += layout.size();
         let res = freertos_rs_pvPortMalloc(layout.size() as u32);
         return res as *mut u8;
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        ALLOCATED_MEM -= _layout.size();
+        // ALLOCATED_MEM -= _layout.size();
         freertos_rs_vPortFree(ptr as FreeRtosVoidPtr)
     }
 }
 
 #[global_allocator]
-static GLOBAL: CustomAllocator = CustomAllocator {};
+static GLOBAL: FreeRtosAllocator = FreeRtosAllocator {};
 
 fn delay_n(n: i32) {
     for _ in 0..n {
@@ -66,7 +66,7 @@ lazy_static::lazy_static! {
 #[entry]
 fn main() -> ! {
     lazy_static::initialize(&HAL);
-    asm::bkpt();
+    // asm::bkpt();
 
     Task::new()
         .name("Blinky")

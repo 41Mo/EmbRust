@@ -4,17 +4,26 @@ use crate::hal::{
     device::UART7,
     gpio::*,
     pac,
+    pac::interrupt,
     prelude::*,
     rcc::rec::UsbClkSel,
     serial::Serial,
+    timer,
     usb_hs::{UsbBus, USB2},
 };
 use core::{
+    cell::RefCell,
     option::{Option, Option::*},
-    sync::atomic::{AtomicPtr, Ordering::Relaxed},
+    ptr::null_mut,
+    sync::atomic::{
+        AtomicPtr, AtomicU32,
+        Ordering::{Relaxed, SeqCst},
+    }, borrow::{BorrowMut, Borrow},
 };
 use usb_device::prelude::*;
 use usbd_serial::SerialPort;
+
+use cortex_m::interrupt::Mutex;
 
 use alloc::sync::Arc;
 use lazy_static::lazy_static;
@@ -36,6 +45,10 @@ pub struct HALDATA {
     pub usb: Option<AtomicPtr<USB<'static>>>,
 }
 use core::fmt;
+
+static TIMER: Mutex<RefCell<Option<timer::Timer<pac::TIM2>>>> = Mutex::new(RefCell::new(None));
+static OVERFLOWS: AtomicU32 = AtomicU32::new(0);
+static TIM2_CALLBACK: AtomicPtr<fn() -> ()> = AtomicPtr::new(null_mut());
 
 // #[macro_export]
 // macro_rules! console_print {
@@ -95,14 +108,13 @@ impl<'a> USB<'a> {
     pub fn poll(&mut self) -> bool {
         self.device.poll(&mut [&mut self.serial])
     }
-
 }
-
 
 static mut EP_MEMORY: [u32; 1024] = [0; 1024];
 
 impl HALDATA {
     fn new() -> Self {
+        let mut cp = cortex_m::Peripherals::take().unwrap();
         let dp = pac::Peripherals::take().unwrap();
         let pwrcfg = dp.PWR.constrain().freeze();
         let rcc = dp.RCC.constrain();
@@ -152,6 +164,20 @@ impl HALDATA {
         .device_class(usbd_serial::USB_CLASS_CDC)
         .build();
 
+        let mut timer = dp
+            .TIM2
+            .tick_timer(1.MHz(), ccdr.peripheral.TIM2, &ccdr.clocks);
+        timer.listen(timer::Event::TimeOut);
+
+        cortex_m::interrupt::free(|cs| {
+            TIMER.borrow(cs).replace(Some(timer));
+        });
+
+        unsafe {
+            cp.NVIC.set_priority(pac::interrupt::TIM2, 4);
+            pac::NVIC::unmask(pac::interrupt::TIM2);
+        }
+
         Self {
             led_blue: AtomicPtr::new(&mut led_blue),
             led_green: AtomicPtr::new(&mut led_green),
@@ -165,13 +191,46 @@ impl HALDATA {
         }
     }
 
-
-    pub fn take_usb(&self) -> Option<&'static mut USB>  {
+    pub fn take_usb(&self) -> Option<&'static mut USB> {
         match self.usb.as_ref() {
-            Some(ap) => unsafe { ap.load(Relaxed).as_mut() }
+            Some(ap) => unsafe { ap.load(Relaxed).as_mut() },
             None => None,
         }
     }
+}
+
+pub fn setup_tim2_callback(cb: &mut fn() -> ())
+{
+    TIM2_CALLBACK.store(cb, SeqCst);
+}
+
+#[interrupt]
+fn TIM2() {
+    match unsafe {TIM2_CALLBACK.load(SeqCst).as_ref()} {
+        Some(cb) => cb(),
+        None => ()
+    }
+
+    OVERFLOWS.fetch_add(1, SeqCst);
+    cortex_m::interrupt::free(|cs| {
+        let mut rc = TIMER.borrow(cs).borrow_mut();
+        let timer = rc.as_mut().unwrap();
+        timer.clear_irq();
+    })
+}
+
+pub fn timestamp() -> u64 {
+    let overflows = OVERFLOWS.load(SeqCst) as u64;
+    // match unsafe {TIM2_CALLBACK.load(SeqCst).as_ref()} {
+    //     Some(cb) => cb(),
+    //     None => ()
+    // }
+    let ctr = cortex_m::interrupt::free(|cs| {
+        let rc = TIMER.borrow(cs).borrow();
+        let timer = rc.as_ref().unwrap();
+        timer.counter() as u64
+    });
+    100 * ((overflows << 16) + ctr)
 }
 
 lazy_static! {
