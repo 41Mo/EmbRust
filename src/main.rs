@@ -57,25 +57,25 @@ fn delay_n(n: i32) {
 
 #[entry]
 fn main() -> ! {
+    // cortex_m::asm::bkpt();
     lazy_static::initialize(&HAL);
-
     Task::new()
         .name("Blinky")
-        .stack_size(740_u16.bytes_to_words())
+        .stack_size(10000_u16.bytes_to_words())
         .priority(TaskPriority(1))
         .start(blink)
         .expect("UnableToCreateTask");
 
     Task::new()
         .name("Telem0")
-        .stack_size(2400_u16.bytes_to_words())
+        .stack_size(10000_u16.bytes_to_words())
         .priority(TaskPriority(1))
         .start(console)
         .expect("UnableToCreateTask");
 
     Task::new()
         .name("Empty")
-        .stack_size(400_u16.bytes_to_words())
+        .stack_size(10000_u16.bytes_to_words())
         .priority(TaskPriority(1))
         .start(empty_task)
         .expect("UnableToCreateTask");

@@ -11,20 +11,22 @@ use crate::hal::{
     timer,
     usb_hs::{UsbBus, USB2},
 };
+use alloc::sync::Arc;
 use core::{
+    borrow::Borrow,
     cell::RefCell,
     option::{Option, Option::*},
     ptr::null_mut,
+    result::Result::{Err, Ok},
     sync::atomic::{
         AtomicPtr, AtomicU32,
         Ordering::{Relaxed, SeqCst},
     },
 };
+use cortex_m::interrupt::Mutex;
+use lazy_static::lazy_static;
 use usb_device::prelude::*;
 use usbd_serial::SerialPort;
-use cortex_m::interrupt::Mutex;
-use alloc::sync::Arc;
-use lazy_static::lazy_static;
 
 type led_blue_type = Pin<'E', 3, Output<PushPull>>;
 type led_green_type = Pin<'E', 4, Output<PushPull>>;
@@ -40,7 +42,7 @@ pub struct HALDATA {
     pub led_blue: AtomicPtr<led_blue_type>,
     pub led_green: AtomicPtr<led_green_type>,
     pub telem1: AtomicPtr<Serial<UART7>>,
-    pub usb: Option<AtomicPtr<USB<'static>>>,
+    pub usb: freertos_rust::Mutex<USB<'static>>,
 }
 
 pub trait ExtU16 {
@@ -75,52 +77,30 @@ static TIM2_CALLBACK: AtomicPtr<fn() -> ()> = AtomicPtr::new(null_mut());
 //     () => ($crate::console_print!("\n"));
 //     ($($arg:tt)*) => ($crate::console_print!("{}\n", format_args!($($arg)*)));
 // }
+//
+static mut USB_BUF_IN: [u8; 64] = [0; 64];
 
 impl<'a> USB<'a> {
-    pub fn print(&mut self, args: fmt::Arguments) {
+    fn print(&mut self, args: fmt::Arguments) {
         let string = alloc::format!("{}", args);
         let buf = string.as_bytes();
         let mut write_offset = 0;
         let count = buf.len();
-        while write_offset < count {
-            match self.serial.write(&buf[write_offset..count]) {
-                Ok(len) if len > 0 => {
-                    write_offset += len;
-                }
-                _ => {}
+        match self.serial.write(&buf[write_offset..count]) {
+            Ok(len) if len > 0 => {
+                write_offset += len;
             }
+            _ => {}
         }
     }
 
-    pub fn read_polling() {
-        todo!()
-        // if usb_dev.poll(&mut [serial]) {
-        //     let mut buf = [0u8; 64];
-        //
-        //     match serial.read(&mut buf) {
-        //         Ok(count) if count > 0 => {
-        //             // Echo back in upper case
-        //             for c in buf[0..count].iter_mut() {
-        //                 if 0x61 <= *c && *c <= 0x7a {
-        //                     *c &= !0x20;
-        //                 }
-        //             }
-        //             let mut write_offset = 0;
-        //             while write_offset < count {
-        //                 match serial.write(&buf[write_offset..count]) {
-        //                     Ok(len) if len > 0 => {
-        //                         write_offset += len;
-        //                     }
-        //                     _ => {}
-        //                 }
-        //             }
-        //         }
-        //         _ => {}
-        //     }
-        // }
+    fn read(&mut self) {
+        unsafe {
+            self.serial.read(&mut USB_BUF_IN);
+        }
     }
 
-    pub fn poll(&mut self) -> bool {
+    fn poll(&mut self) -> bool {
         self.device.poll(&mut [&mut self.serial])
     }
 }
@@ -198,32 +178,54 @@ impl HALDATA {
             led_green: AtomicPtr::new(&mut led_green),
             telem1: AtomicPtr::new(&mut telem1),
             usb: {
-                Some(AtomicPtr::new(&mut USB {
+                freertos_rust::Mutex::new(USB {
                     serial,
                     device: usb_dev,
-                }))
+                })
+                .unwrap()
             },
         }
     }
 
-    pub fn take_usb(&self) -> Option<&'static mut USB> {
-        match self.usb.as_ref() {
-            Some(ap) => unsafe { ap.load(Relaxed).as_mut() },
-            None => None,
+    pub fn usb_print(&self, args: fmt::Arguments) {
+        match self
+            .usb
+            .borrow()
+            .lock(freertos_rust::Duration::ms(100))
+            .as_mut()
+        {
+            Ok(mg_usb) => mg_usb.print(args),
+            Err(_) => (),
+        }
+    }
+
+    pub fn usb_poll(&self) -> bool {
+        match self
+            .usb
+            .borrow()
+            .lock(freertos_rust::Duration::ms(100))
+            .as_mut()
+        {
+            Ok(mg_usb) => {
+                mg_usb.poll();
+                mg_usb.read();
+                match mg_usb.device.state() {
+                    UsbDeviceState::Default => false,
+                    UsbDeviceState::Addressed => false,
+                    UsbDeviceState::Configured => true,
+                    UsbDeviceState::Suspend => false,
+                }
+            }
+            Err(_) => false,
         }
     }
 }
 
-pub fn setup_tim2_callback(cb: &mut fn() -> ())
-{
-    TIM2_CALLBACK.store(cb, SeqCst);
-}
-
 #[interrupt]
 fn TIM2() {
-    match unsafe {TIM2_CALLBACK.load(SeqCst).as_ref()} {
+    match unsafe { TIM2_CALLBACK.load(SeqCst).as_ref() } {
         Some(cb) => cb(),
-        None => ()
+        None => (),
     }
 
     OVERFLOWS.fetch_add(1, SeqCst);
@@ -236,10 +238,6 @@ fn TIM2() {
 
 pub fn timestamp() -> u64 {
     let overflows = OVERFLOWS.load(SeqCst) as u64;
-    // match unsafe {TIM2_CALLBACK.load(SeqCst).as_ref()} {
-    //     Some(cb) => cb(),
-    //     None => ()
-    // }
     let ctr = cortex_m::interrupt::free(|cs| {
         let rc = TIMER.borrow(cs).borrow();
         let timer = rc.as_ref().unwrap();
